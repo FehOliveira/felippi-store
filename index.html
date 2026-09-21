@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Felippi Store</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',sans-serif; }
+  body { background:#f4f6f8; color:#222; }
+  header { background:#1a73e8; color:#fff; padding:12px 18px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  header h1 { font-size:1.15rem; margin-right:auto; }
+  nav button { background:rgba(255,255,255,.15); color:#fff; border:0; padding:8px 12px; border-radius:6px; cursor:pointer; margin-left:4px; }
+  nav button.ativo, nav button:hover { background:#fff; color:#1a73e8; }
+  main { max-width:1100px; margin:18px auto; padding:0 14px; }
+  section { display:none; } section.ativo { display:block; }
+  .card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
+  .card { background:#fff; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.1); padding:12px; }
+  .card img { width:100%; height:140px; object-fit:cover; border-radius:6px; background:#eee; }
+  .card h3 { font-size:1rem; margin:8px 0 2px; }
+  .preco { color:#1a73e8; font-weight:bold; }
+  .primario { background:#1a73e8; color:#fff; border:0; padding:8px 14px; border-radius:6px; cursor:pointer; }
+  .perigo { background:#d93025; color:#fff; border:0; padding:6px 10px; border-radius:6px; cursor:pointer; }
+  form { background:#fff; padding:16px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.1);
+         display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-bottom:18px; }
+  form .full { grid-column:1/-1; }
+  input, select { padding:8px; border:1px solid #ccc; border-radius:6px; width:100%; }
+  table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden;
+          box-shadow:0 1px 4px rgba(0,0,0,.1); }
+  th, td { padding:10px; text-align:left; border-bottom:1px solid #eee; font-size:.9rem; }
+  th { background:#eef3fb; }
+  h2 { margin:6px 0 14px; }
+  .acoes { display:flex; gap:6px; flex-wrap:wrap; }
+  .msg { padding:10px; border-radius:6px; margin:10px 0; display:none; }
+  .msg.ok { display:block; background:#d9f2e3; color:#1c6b3a; }
+  .msg.erro { display:block; background:#fde2e0; color:#a32219; }
+  .filtros { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .filtros input { width:160px; }
+  .modal-fundo { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:10;
+                 align-items:center; justify-content:center; }
+  .modal { background:#fff; border-radius:12px; padding:20px; width:min(420px,92vw); max-height:85vh; overflow:auto; }
+  .modal h3 { margin-bottom:12px; }
+  @media (max-width:600px){ th,td { padding:6px; font-size:.78rem; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛒 Felippi Store</h1>
+  <nav>
+    <button data-aba="loja" class="ativo">🛍️ Loja</button>
+    <button data-aba="meuspedidos">👤 Meus Pedidos</button>
+    <button data-aba="produtos">📦 Admin: Produtos</button>
+    <button data-aba="clientes">👥 Admin: Clientes</button>
+  </nav>
+</header>
+<main>
+  <div id="msg" class="msg"></div>
+
+  <!-- ===== LOJA (interface do cliente) ===== -->
+  <section id="loja" class="ativo">
+    <h2>Catálogo de Produtos</h2>
+    <div class="filtros">
+      <input id="fMarca" placeholder="Marca">
+      <input id="fModelo" placeholder="Modelo">
+      <input id="fPrecoMax" type="number" placeholder="Preço máximo (R$)">
+      <button class="primario" onclick="renderLoja()">Filtrar</button>
+    </div>
+    <div id="gridLoja" class="card-grid"></div>
+  </section>
+
+  <!-- ===== ÁREA DO CLIENTE ===== -->
+  <section id="meuspedidos">
+    <h2>Área do Cliente</h2>
+    <form onsubmit="event.preventDefault(); buscarCliente()">
+      <input id="cliEmailBusca" type="email" placeholder="Seu e-mail cadastrado" class="full">
+      <button class="primario full">Buscar meus dados e pedidos</button>
+    </form>
+    <div id="areaCliente"></div>
+  </section>
+
+  <!-- ===== ADMIN: PRODUTOS ===== -->
+  <section id="produtos">
+    <h2>Gerenciar Produtos</h2>
+    <form id="formProduto" onsubmit="event.preventDefault(); salvarProduto()">
+      <input type="hidden" id="pRowKey">
+      <input id="pMarca" placeholder="Marca" required>
+      <input id="pModelo" placeholder="Modelo" required>
+      <input id="pValor" type="number" step="0.01" min="0" placeholder="Valor (R$)" required>
+      <input id="pQtd" type="number" min="0" placeholder="Quantidade" required>
+      <input id="pFoto" type="file" accept="image/*">
+      <div class="full acoes">
+        <button class="primario">Salvar produto</button>
+        <button type="button" onclick="limparFormProduto()">Limpar</button>
+      </div>
+    </form>
+    <table>
+      <thead><tr><th>Foto</th><th>Marca</th><th>Modelo</th><th>Valor</th><th>Qtd</th><th>Ações</th></tr></thead>
+      <tbody id="tbProdutos"></tbody>
+    </table>
+  </section>
+
+  <!-- ===== ADMIN: CLIENTES ===== -->
+  <section id="clientes">
+    <h2>Gerenciar Clientes</h2>
+    <form id="formCliente" onsubmit="event.preventDefault(); salvarCliente()">
+      <input type="hidden" id="cRowKey">
+      <input id="cNome" placeholder="Nome completo" required>
+      <input id="cEmail" type="email" placeholder="E-mail" required>
+      <input id="cTelefone" placeholder="Telefone">
+      <input id="cEndereco" placeholder="Endereço">
+      <div class="full acoes">
+        <button class="primario">Salvar cliente</button>
+        <button type="button" onclick="limparFormCliente()">Limpar</button>
+      </div>
+    </form>
+    <table>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>Ações</th></tr></thead>
+      <tbody id="tbClientes"></tbody>
+    </table>
+  </section>
+</main>
+
+<!-- Modal de checkout -->
+<div class="modal-fundo" id="mFundo">
+  <div class="modal">
+    <h3>🧾 Checkout</h3>
+    <p id="ckProduto" style="margin-bottom:10px"></p>
+    <form onsubmit="event.preventDefault(); confirmarPedido()">
+      <input id="ckQtd" type="number" min="1" value="1" placeholder="Quantidade" required
+             oninput="calcTotal()">
+      <select id="ckPagamento">
+        <option>Cartão de Crédito</option><option>PIX</option><option>Boleto</option>
+      </select>
+      <select id="ckEntrega">
+        <option>Sedex</option><option>PAC</option><option>Retirada na loja</option>
+      </select>
+      <p style="font-size:1.1rem">Total: <b id="ckTotal" class="preco"></b></p>
+      <div class="acoes full">
+        <button class="primario">Confirmar pedido</button>
+        <button type="button" class="perigo" onclick="fecharModal()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal de histórico -->
+<div class="modal-fundo" id="mHist">
+  <div class="modal">
+    <h3>📚 Histórico de pedidos</h3>
+    <div id="histConteudo"></div>
+    <div class="acoes" style="margin-top:12px">
+      <button class="perigo" onclick="document.getElementById('mHist').style.display='none'">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= CONFIGURAÇÃO (credenciais da prova) ================= */
+const ACCOUNT  = "stop1nuvem2";
+const SAS      = "sv=2026-02-06&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2026-10-05T06%3A04%3A57Z&st=2026-09-21T21%3A49%3A57Z&spr=https&sig=U4XQieZ%2FHTj%2Fi9xN42AFjUEDQw%2FLcqp5Fzw%2BFwOQMms%3D";
+const T_PROD   = "FELIPPIPRODUTOS";   // tabela de produtos
+const T_CLI    = "FELIPPICLIENTES";   // tabela de clientes
+const T_PED    = "FELIPPIPEDIDOS";    // tabela de pedidos
+const CONTAINER = "felippi-img";      // container de fotos no Blob Storage
+
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
+  : "id-" + Date.now() + "-" + Math.random().toString(36).slice(2));
+
+const msg = (texto, tipo) => {
+  const m = document.getElementById("msg");
+  m.textContent = texto; m.className = "msg " + tipo;
+  setTimeout(() => (m.className = "msg"), 6000);
+};
+
+/* ================= TABLE STORAGE (API REST + SAS) ================= */
+async function tableList(tabela, filtro) {
+  let url = `https://${ACCOUNT}.table.core.windows.net/${tabela}()`;
+  url += filtro ? `?$filter=${encodeURIComponent(filtro)}&${SAS}` : `?${SAS}`;
+  const r = await fetch(url, { headers: { Accept: "application/json;odata=nometadata" } });
+  if (!r.ok) throw new Error("Table read: " + (await r.text()));
+  return (await r.json()).value;
+}
+async function tableInsert(tabela, entidade) {
+  const r = await fetch(`https://${ACCOUNT}.table.core.windows.net/${tabela}?${SAS}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json;odata=nometadata",
+               Accept: "application/json;odata=nometadata" },
+    body: JSON.stringify(entidade)
+  });
+  if (!r.ok) throw new Error("Table insert: " + (await r.text()));
+}
+async function tableUpdate(tabela, pk, rk, entidade) {  // PUT substitui a entidade
+  const r = await fetch(
+    `https://${ACCOUNT}.table.core.windows.net/${tabela}(PartitionKey='${encodeURIComponent(pk)}',RowKey='${encodeURIComponent(rk)}')?${SAS}`,
+    { method: "PUT", headers: { "Content-Type": "application/json;odata=nometadata", "If-Match": "*" },
+      body: JSON.stringify(entidade) });
+  if (!r.ok) throw new Error("Table update: " + (await r.text()));
+}
+async function tableDelete(tabela, pk, rk) {
+  const r = await fetch(
+    `https://${ACCOUNT}.table.core.windows.net/${tabela}(PartitionKey='${encodeURIComponent(pk)}',RowKey='${encodeURIComponent(rk)}')?${SAS}`,
+    { method: "DELETE", headers: { "If-Match": "*" } });
+  if (!r.ok) throw new Error("Table delete: " + (await r.text()));
+}
+
+/* ================= BLOB STORAGE (upload da foto do produto) ================= */
+async function uploadImagem(file) {
+  const nome = uuid() + "-" + file.name.replace(/\s+/g, "");
+  const url = `https://${ACCOUNT}.blob.core.windows.net/${CONTAINER}/${nome}?${SAS}`;
+  const r = await fetch(url, { method: "PUT",
+    headers: { "x-ms-blob-type": "BlockBlob", "Content-Type": file.type }, body: file });
+  if (!r.ok) throw new Error("Blob upload: " + (await r.text()));
+  // URL pública direta do Blob Storage (container com leitura anônima)
+  return `https://${ACCOUNT}.blob.core.windows.net/${CONTAINER}/${nome}`;
+}
+
+/* ================= NAVEGAÇÃO DE ABAS ================= */
+document.querySelectorAll("nav button").forEach(b =>
+  b.onclick = () => {
+    document.querySelectorAll("nav button, section").forEach(x => x.classList.remove("ativo"));
+    b.classList.add("ativo");
+    document.getElementById(b.dataset.aba).classList.add("ativo");
+    if (b.dataset.aba === "loja") renderLoja();
+    if (b.dataset.aba === "produtos") listarProdutos();
+    if (b.dataset.aba === "clientes") listarClientes();
+  });
+
+/* ================= LOJA + FILTROS ================= */
+async function renderLoja() {
+  try {
+    const produtos = await tableList(T_PROD);
+    const fM  = document.getElementById("fMarca").value.toLowerCase();
+    const fMo = document.getElementById("fModelo").value.toLowerCase();
+    const fP  = parseFloat(document.getElementById("fPrecoMax").value);
+    const lista = produtos.filter(p =>
+      (!fM  || (p.Marca  || "").toLowerCase().includes(fM)) &&
+      (!fMo || (p.Modelo || "").toLowerCase().includes(fMo)) &&
+      (isNaN(fP) || p.Valor <= fP));
+    document.getElementById("gridLoja").innerHTML = lista.map(p => `
+      <div class="card">
+        ${p.FotoUrl ? `<img src="${p.FotoUrl}" onerror="this.style.display='none'">` : ""}
+        <h3>${p.Marca || ""} ${p.Modelo || ""}</h3>
+        <p class="preco">R$ ${(p.Valor || 0).toFixed(2)}</p>
+        <p>Disponível: ${p.Quantidade ?? 0}</p>
+        <p><button class="primario" onclick="abrirCheckout('${p.RowKey}')">Comprar</button></p>
+      </div>`).join("") || "<p>Nenhum produto encontrado.</p>";
+  } catch (e) { msg("Erro ao carregar produtos: " + e.message, "erro"); }
+}
+
+/* ================= CHECKOUT COM VALIDAÇÃO (item C) ================= */
+let produtoCheckout = null;
+async function abrirCheckout(rk) {
+  const produtos = await tableList(T_PROD, `RowKey eq '${rk}'`);
+  produtoCheckout = produtos[0];
+  if (!produtoCheckout) return msg("Produto não encontrado.", "erro");
+  if (!produtoCheckout.Quantidade || produtoCheckout.Quantidade < 1)
+    return msg("Produto sem estoque.", "erro");
+  document.getElementById("ckProduto").innerHTML =
+    `<b>${produtoCheckout.Marca} ${produtoCheckout.Modelo}</b> — ` +
+    `R$ ${produtoCheckout.Valor.toFixed(2)} | estoque: ${produtoCheckout.Quantidade}`;
+  document.getElementById("ckQtd").value = 1;
+  calcTotal();
+  document.getElementById("mFundo").style.display = "flex";
+}
+function calcTotal() {
+  const q = parseInt(document.getElementById("ckQtd").value) || 0;
+  document.getElementById("ckTotal").textContent =
+    "R$ " + (q * (produtoCheckout?.Valor || 0)).toFixed(2);
+}
+function fecharModal() { document.getElementById("mFundo").style.display = "none"; }
+async function confirmarPedido() {
+  if (!produtoCheckout) return;
+  const q = parseInt(document.getElementById("ckQtd").value);
+  /* --- validação de valor e quantidade exigida no escopo --- */
+  if (isNaN(q) || q <= 0) return msg("Quantidade inválida.", "erro");
+  if (q > produtoCheckout.Quantidade)
+    return msg(`Estoque insuficiente (disponível: ${produtoCheckout.Quantidade}).`, "erro");
+  const total = q * produtoCheckout.Valor;
+  try {
+    const email = prompt("Digite seu e-mail de cliente cadastrado:");
+    if (!email) return;
+    const clientes = await tableList(T_CLI, `Email eq '${email.replace(/'/g, "''")}'`);
+    if (!clientes.length) return msg("Cliente não encontrado. Cadastre-se na aba Admin: Clientes.", "erro");
+    const cli = clientes[0];
+    // Pedido: PartitionKey = RowKey do cliente -> histórico fácil de consultar
+    await tableInsert(T_PED, {
+      PartitionKey: cli.RowKey, RowKey: uuid(),
+      ClienteNome: cli.Nome,
+      Itens: JSON.stringify([{ modelo: produtoCheckout.Modelo, marca: produtoCheckout.Marca,
+                               qtd: q, valorUnit: produtoCheckout.Valor }]),
+      Total: total,
+      Pagamento: document.getElementById("ckPagamento").value,
+      Entrega: document.getElementById("ckEntrega").value,
+      Data: new Date().toISOString()
+    });
+    // Baixa de estoque
+    await tableUpdate(T_PROD, produtoCheckout.PartitionKey, produtoCheckout.RowKey, {
+      ...produtoCheckout, Quantidade: produtoCheckout.Quantidade - q });
+    fecharModal();
+    msg(`✅ Pedido confirmado! Total: R$ ${total.toFixed(2)}`, "ok");
+    renderLoja();
+  } catch (e) { msg("Erro no checkout: " + e.message, "erro"); }
+}
+
+/* ================= ADMIN: PRODUTOS ================= */
+async function salvarProduto() {
+  try {
+    const rk = document.getElementById("pRowKey").value;
+    const ent = {
+      PartitionKey: "PRODUTO",
+      RowKey: rk || uuid(),
+      Marca: document.getElementById("pMarca").value,
+      Modelo: document.getElementById("pModelo").value,
+      Valor: parseFloat(document.getElementById("pValor").value),
+      Quantidade: parseInt(document.getElementById("pQtd").value) || 0
+    };
+    const foto = document.getElementById("pFoto").files[0];
+    if (foto) ent.FotoUrl = await uploadImagem(foto);   // Blob Storage
+    if (rk) {
+      const antigo = (await tableList(T_PROD, `RowKey eq '${rk}'`))[0];
+      ent.FotoUrl = ent.FotoUrl || antigo?.FotoUrl || "";
+    } else ent.FotoUrl = ent.FotoUrl || "";
+    if (rk) await tableUpdate(T_PROD, ent.PartitionKey, rk, ent);
+    else await tableInsert(T_PROD, ent);
+    limparFormProduto(); listarProdutos();
+    msg("✅ Produto salvo!", "ok");
+  } catch (e) { msg("Erro: " + e.message, "erro"); }
+}
+function limparFormProduto() {
+  document.getElementById("formProduto").reset();
+  document.getElementById("pRowKey").value = "";
+}
+async function listarProdutos() {
+  try {
+    const ps = await tableList(T_PROD);
+    document.getElementById("tbProdutos").innerHTML = ps.map(p => `
+      <tr>
+        <td>${p.FotoUrl ? `<img src="${p.FotoUrl}" style="width:44px;height:44px;object-fit:cover;border-radius:6px">` : "—"}</td>
+        <td>${p.Marca || ""}</td><td>${p.Modelo || ""}</td>
+        <td>R$ ${(p.Valor || 0).toFixed(2)}</td><td>${p.Quantidade ?? 0}</td>
+        <td class="acoes">
+          <button class="primario" onclick='editarProduto(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Editar</button>
+          <button class="perigo" onclick="excluirProduto('${p.RowKey}')">Excluir</button>
+        </td>
+      </tr>`).join("") || "<tr><td colspan='6'>Nenhum produto cadastrado.</td></tr>";
+  } catch (e) { msg("Erro: " + e.message, "erro"); }
+}
+function editarProduto(p) {
+  document.getElementById("pRowKey").value = p.RowKey;
+  document.getElementById("pMarca").value = p.Marca || "";
+  document.getElementById("pModelo").value = p.Modelo || "";
+  document.getElementById("pValor").value = p.Valor || 0;
+  document.getElementById("pQtd").value = p.Quantidade ?? 0;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+async function excluirProduto(rk) {
+  if (!confirm("Excluir este produto?")) return;
+  try { await tableDelete(T_PROD, "PRODUTO", rk); listarProdutos(); msg("🗑️ Produto excluído.", "ok"); }
+  catch (e) { msg("Erro: " + e.message, "erro"); }
+}
+
+/* ================= ADMIN: CLIENTES ================= */
+async function salvarCliente() {
+  try {
+    const rk = document.getElementById("cRowKey").value;
+    const ent = {
+      PartitionKey: "CLIENTE",
+      RowKey: rk || uuid(),
+      Nome: document.getElementById("cNome").value,
+      Email: document.getElementById("cEmail").value,
+      Telefone: document.getElementById("cTelefone").value,
+      Endereco: document.getElementById("cEndereco").value
+    };
+    if (rk) await tableUpdate(T_CLI, ent.PartitionKey, rk, ent);
+    else await tableInsert(T_CLI, ent);
+    limparFormCliente(); listarClientes();
+    msg("✅ Cliente salvo!", "ok");
+  } catch (e) { msg("Erro: " + e.message, "erro"); }
+}
+function limparFormCliente() {
+  document.getElementById("formCliente").reset();
+  document.getElementById("cRowKey").value = "";
+}
+async function listarClientes() {
+  try {
+    const cs = await tableList(T_CLI);
+    document.getElementById("tbClientes").innerHTML = cs.map(c => `
+      <tr>
+        <td>${c.Nome || ""}</td><td>${c.Email || ""}</td><td>${c.Telefone || ""}</td>
+        <td class="acoes">
+          <button class="primario" onclick='editarCliente(${JSON.stringify(c).replace(/'/g, "&#39;")})'>Editar</button>
+          <button class="primario" onclick="verHistorico('${c.RowKey}', '${(c.Nome || "").replace(/'/g, "\'")}')">Histórico</button>
+          <button class="perigo" onclick="excluirCliente('${c.RowKey}')">Excluir</button>
+        </td>
+      </tr>`).join("") || "<tr><td colspan='4'>Nenhum cliente cadastrado.</td></tr>";
+  } catch (e) { msg("Erro: " + e.message, "erro"); }
+}
+function editarCliente(c) {
+  document.getElementById("cRowKey").value = c.RowKey;
+  document.getElementById("cNome").value = c.Nome || "";
+  document.getElementById("cEmail").value = c.Email || "";
+  document.getElementById("cTelefone").value = c.Telefone || "";
+  document.getElementById("cEndereco").value = c.Endereco || "";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+async function excluirCliente(rk) {
+  if (!confirm("Excluir este cliente?")) return;
+  try { await tableDelete(T_CLI, "CLIENTE", rk); listarClientes(); msg("🗑️ Cliente excluído.", "ok"); }
+  catch (e) { msg("Erro: " + e.message, "erro"); }
+}
+async function verHistorico(rk, nome) {
+  try {
+    const pedidos = await tableList(T_PED, `PartitionKey eq '${rk}'`);
+    document.getElementById("histConteudo").innerHTML = pedidos.length
+      ? pedidos.map(p => `<p>🧾 <b>${new Date(p.Data).toLocaleDateString("pt-BR")}</b> — ${JSON.parse(p.Itens).map(i => i.modelo + " x" + i.qtd).join(", ")} — R$ ${p.Total.toFixed(2)} (${p.Pagamento} / ${p.Entrega})</p>`).join("")
+      : "<p>Nenhum pedido ainda.</p>";
+    document.getElementById("mHist").style.display = "flex";
+  } catch (e) { msg("Erro: " + e.message, "erro"); }
+}
+
+/* ================= ÁREA DO CLIENTE ================= */
+async function buscarCliente() {
+  const email = document.getElementById("cliEmailBusca").value.trim().replace(/'/g, "''");
+  try {
+    const cs = await tableList(T_CLI, `Email eq '${email}'`);
+    if (!cs.length) return msg("Cliente não encontrado.", "erro");
+    const c = cs[0];
+    const pedidos = await tableList(T_PED, `PartitionKey eq '${c.RowKey}'`);
+    document.getElementById("areaCliente").innerHTML = `
+      <h2 style="margin-top:18px">Meus dados</h2>
+      <form onsubmit="event.preventDefault(); salvarMeusDados('${c.RowKey}')">
+        <input id="mcNome" value="${(c.Nome || "").replace(/"/g, "&quot;")}" required>
+        <input id="mcEmail" value="${(c.Email || "").replace(/"/g, "&quot;")}" required>
+        <input id="mcTelefone" value="${(c.Telefone || "").replace(/"/g, "&quot;")}">
+        <input id="mcEndereco" value="${(c.Endereco || "").replace(/"/g, "&quot;")}">
+        <button class="primario full">Salvar alterações</button>
+      </form>
+      <h2>Meus pedidos</h2>
+      ${pedidos.length ? `<table><thead><tr><th>Data</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Entrega</th></tr></thead><tbody>
+        ${pedidos.map(p => `<tr><td>${new Date(p.Data).toLocaleDateString("pt-BR")}</td>
+          <td>${JSON.parse(p.Itens).map(i => `${i.marca} ${i.modelo} x${i.qtd}`).join(", ")}</td>
+          <td>R$ ${p.Total.toFixed(2)}</td><td>${p.Pagamento}</td><td>${p.Entrega}</td></tr>`).join("")}
+      </tbody></table>` : "<p>Você ainda não fez pedidos.</p>"}`;
+  } catch (e) { msg("Erro: " + e.message, "erro"); }
+}
+async function salvarMeusDados(rk) {
+  try {
+    const antigo = (await tableList(T_CLI, `RowKey eq '${rk}'`))[0];
+    await tableUpdate(T_CLI, antigo.PartitionKey, rk, {
+      PartitionKey: antigo.PartitionKey, RowKey: rk,
+      Nome: document.getElementById("mcNome").value,
+      Email: document.getElementById("mcEmail").value,
+      Telefone: document.getElementById("mcTelefone").value,
+      Endereco: document.getElementById("mcEndereco").value });
+    msg("✅ Dados atualizados!", "ok");
+  } catch (e) { msg("Erro: " + e.message, "erro"); }
+}
+
+renderLoja();
+</script>
+</body>
+</html>
